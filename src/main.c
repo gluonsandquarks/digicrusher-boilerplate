@@ -14,15 +14,15 @@
 #define I2S_DIN 27    // data in
 #define I2S_DOUT 26   // data out
 
-#define DMA_BUF_LEN (512)
-#define DMA_BUF_COUNT (6)
+#define DMA_BUF_LEN (32)
+#define DMA_BUF_COUNT (2)
 
-AIC3254 aic3254; // codec class
+#define MAX_32BIT 2147483647.0F
 
 // DMA buffers
-int32_t rxbuf[256], txbuf[256];
-float l_in[128], r_in[128];
-float l_out[128], r_out[128];
+int32_t rxbuf[DMA_BUF_LEN * 2], txbuf[DMA_BUF_LEN * 2];
+float l_in[DMA_BUF_LEN], r_in[DMA_BUF_LEN];
+float l_out[DMA_BUF_LEN], r_out[DMA_BUF_LEN];
 
 void init_i2s()
 {
@@ -57,11 +57,6 @@ void init_i2s()
     printf("Sampling frequency: %.2f\n", i2s_get_clk(I2S_PORT));
 }
 
-extern "C"
-{
-    void app_main(void);
-}
-
 void app_main()
 {
 
@@ -73,9 +68,9 @@ void app_main()
     gpio_set_level(GPIO_NUM_5, ledState);
 
     // initialize codec
-    aic3254.init_i2c();
-    aic3254.init_demo();
-    // aic3254.debug_registers(); // uncomment this line to print and look at the values written and read from each register on the codec
+    init_codec_i2c();
+    init_codec_demo();
+    // debug_codec_registers(); // uncomment this line to print and look at the values written and read from each register on the codec
 
     // initialize i2s bus
     init_i2s();
@@ -86,21 +81,20 @@ void app_main()
     while (1)
     {
         // read 256 samples (128 stereo samples)
-        esp_err_t rxfb = i2s_read(I2S_PORT, &rxbuf[0], 256 * 4, &readsize, 1000);
-        if (rxfb == ESP_OK && readsize == 256 * 4)
+        esp_err_t rxfb = i2s_read(I2S_PORT, &rxbuf[0], sizeof(rxbuf), &readsize, 1000);
+        if (rxfb == ESP_OK && readsize == sizeof(rxbuf))
         {
             // extract stereo samples to mono buffers
             int y = 0;
-            for (int i = 0; i < 256; i = i + 2)
+            for (int i = 0; i < DMA_BUF_LEN * 2; i = i + 2)
             {
-                // printf("RX_BUF: %d\n", rxbuf[i]);
-                l_in[y] = (float)rxbuf[i];
-                r_in[y] = (float)rxbuf[i + 1];
+                l_in[y] = ((float)rxbuf[i]) / MAX_32BIT;
+                r_in[y] = ((float)rxbuf[i + 1]) / MAX_32BIT;
                 y++;
             }
 
             // do something to samples here
-            for (int i = 0; i < 128; i++)
+            for (int i = 0; i < DMA_BUF_LEN; i++)
             {
                 // perform mono mix + gain control
                 l_out[i] = (l_in[i] + r_in[i]) * gain;
@@ -109,14 +103,14 @@ void app_main()
 
             // merge two l and r buffers into a mixed buffer and write back to hardware
             y = 0;
-            for (int i = 0; i < 128; i++)
+            for (int i = 0; i < DMA_BUF_LEN; i++)
             {
-                txbuf[y] = (int32_t)l_out[i];
-                txbuf[y + 1] = (int32_t)r_out[i];
+                txbuf[y] = (int32_t)(l_out[i] * MAX_32BIT);
+                txbuf[y + 1] = (int32_t)(r_out[i] * MAX_32BIT);
                 y = y + 2;
             }
 
-            i2s_write(I2S_PORT, &txbuf[0], 256 * 4, &readsize, 1000);
+            i2s_write(I2S_PORT, &txbuf[0], sizeof(txbuf), &readsize, 1000);
         }
     }
 }

@@ -1,6 +1,6 @@
 #include "AIC3254.h"
 
-void AIC3254::init_i2c(void)
+void init_codec_i2c(void)
 {
     i2c_port_t i2c_master_port = (i2c_port_t)I2C_PORT_NUM;
     i2c_config_t conf;
@@ -18,7 +18,7 @@ void AIC3254::init_i2c(void)
                        I2C_MASTER_TX_BUF_DISABLE, 0);
 }
 
-void AIC3254::set_register(uint8_t register_address, uint8_t set_value)
+static void set_register(uint8_t register_address, uint8_t set_value)
 {
     register_address = register_address & 0x007F; // register bit mask to limit register address from 0 to 127 (see application reference guide p.94)
 
@@ -28,11 +28,11 @@ void AIC3254::set_register(uint8_t register_address, uint8_t set_value)
     i2c_master_write_byte(cmd, register_address, ACK_CHECK_EN);                // target register
     i2c_master_write_byte(cmd, set_value, ACK_CHECK_EN);                       // target value
     i2c_master_stop(cmd);                                                      // send stop bit
-    i2c_master_cmd_begin((i2c_port_t)I2C_PORT_NUM, cmd, 1000 / portTICK_RATE_MS);
+    i2c_master_cmd_begin((i2c_port_t)I2C_PORT_NUM, cmd, 1000 / portTICK_PERIOD_MS);
     i2c_cmd_link_delete(cmd);
 }
 
-uint8_t AIC3254::read_register(uint8_t register_address)
+static uint8_t read_register(uint8_t register_address)
 {
     uint8_t data = 0xFF;                          // initialize the buffer to 255
     register_address = register_address & 0x007F; // register bit mask to limit register address from 0 to 127 (see application reference guide p.94)
@@ -44,13 +44,13 @@ uint8_t AIC3254::read_register(uint8_t register_address)
     i2c_master_write_byte(cmd, (AIC3254_ADDR << 1) | READ_BIT, ACK_CHECK_EN);  // aic3254 7-bit address + read bit
     i2c_master_read_byte(cmd, &data, I2C_MASTER_NACK);                         // read into data buffer
     i2c_master_stop(cmd);                                                      // send stop bit
-    i2c_master_cmd_begin((i2c_port_t)I2C_PORT_NUM, cmd, 1000 / portTICK_RATE_MS);
+    i2c_master_cmd_begin((i2c_port_t)I2C_PORT_NUM, cmd, 1000 / portTICK_PERIOD_MS);
     i2c_cmd_link_delete(cmd);
 
     return data;
 }
 
-void AIC3254::test_register(uint8_t register_address, uint8_t expected_value)
+static void test_register(uint8_t register_address, uint8_t expected_value)
 {
     uint8_t read_value = read_register(register_address);
 
@@ -64,7 +64,7 @@ void AIC3254::test_register(uint8_t register_address, uint8_t expected_value)
     }
 }
 
-void AIC3254::init_demo(void)
+void init_codec_demo(void)
 {
     uint8_t gain = 0x00; // input gain set to +0db gain
 
@@ -128,7 +128,7 @@ void AIC3254::init_demo(void)
     vTaskDelay(10 / portTICK_PERIOD_MS); // wait for device to initialize registers
 }
 
-void AIC3254::debug_registers(void)
+void debug_codec_registers(void)
 {
     uint8_t gain = 0x06; // input gain set to +3 dB
 
